@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #define NUM_OF_MAX_CHARACTERS 256
+#define NUM_OF_TREE_BITS 30
 
 /* Node structure */
 struct node {
@@ -15,7 +16,7 @@ typedef struct node Node;
 
 Node* tree;
 int* frequency;
-int code_table[NUM_OF_MAX_CHARACTERS];
+int code_table[NUM_OF_MAX_CHARACTERS][NUM_OF_TREE_BITS];
 
 void find_frequencies(FILE *f) {
     frequency = (int *) calloc(NUM_OF_MAX_CHARACTERS, sizeof(int));
@@ -54,10 +55,9 @@ int find_smaller(Node* node_array[], int from) {
 
 void build_tree(Node** tree) {
     Node* node_array[NUM_OF_MAX_CHARACTERS];
-    //Node* node_array = (Node * ) calloc(NUM_OF_MAX_CHARACTERS, sizeof(Node));
     for (int i = 0; i < NUM_OF_MAX_CHARACTERS; i++) {
         if (frequency[i] > 0) {
-            printf("Frequency: %i, int: %i, char: %c\n", frequency[i], i, i);
+            printf("Frequency: %i, char: %c\n", frequency[i], i, i);
         }
         node_array[i] = malloc(sizeof(Node));
         node_array[i]->freq = frequency[i];
@@ -90,50 +90,29 @@ void build_tree(Node** tree) {
     *tree = node_array[small_one];
 }
 
-void fill_binary_table(int code_table[], Node *tree, int code) {
-    printf("code for tree letter: %c, code: %i\n", tree->letter, code);
-    printf("left: %i\n", code * 10 + 1);
-    printf("right: %i\n", code * 10 + 2);
+void fill_binary_table(char code_table[NUM_OF_MAX_CHARACTERS][NUM_OF_TREE_BITS], Node *tree, char code[]) {
     if (tree->letter >= 0) {
-        code_table[(int) tree->letter] = code;
-    } else {
-        fill_binary_table(code_table, tree->left, code * 10 + 1);
-        fill_binary_table(code_table, tree->right, code * 10 + 2);
-    }
-}
-
-void print_code_table() {
-    printf("Binary tree filled...\n");
-    for (int i = 0; i < NUM_OF_MAX_CHARACTERS; i++) {
-        if (code_table[i] > 0) {
-            printf("Binary code for %c: %i \n", i, code_table[i]);
+        printf("\nTree letter: %c\n", tree->letter);
+        for (int y = 0; y < NUM_OF_TREE_BITS; y++) {
+            printf("%c", code[y]);
+            code_table[(int) tree->letter][y] = code[y];
         }
+    } else {
+        char new_code_left[NUM_OF_TREE_BITS];
+        char new_code_right[NUM_OF_TREE_BITS];
+        for (int k = 0; k < NUM_OF_TREE_BITS; k++){
+            if (k == NUM_OF_TREE_BITS - 1) {
+                new_code_left[k] = '1';
+                new_code_right[k] = '2';
+            } else {
+                new_code_left[k] = code[k + 1];
+                new_code_right[k] = code[k + 1];
+            }
+        }
+        fill_binary_table(code_table, tree->left, new_code_left);
+        fill_binary_table(code_table, tree->right, new_code_right);
     }
 }
-
-// //this is from github. 
-// void write_char_bit(FILE* fileout, char c) {
-//     int code = code_table[(int) c];
-//     if (bits_in_buffer == MAX_BUFFER_SIZE << 3) {
-//         size_t bytes_written = fwrite(buffer, 1, MAX_BUFFER_SIZE, fileout);
-//         if (bytes_written < MAX_BUFFER_SIZE && ferror(f)) {
-//             return INVALID_BIT_WRITE;
-//         }
-//         bits_in_buffer = 0;
-//         memset(buffer, 0, MAX_BUFFER_SIZE);
-//     }
-//     if (c) {
-//         buffer[bits_in_buffer >> 3] |= (0x1 << (7 - bits_in_buffer % 8));
-//     }
-//     ++bits_in_buffer;
-// }
-
-// void encode_chars_to_file(FILE* filein, FILE* fileout, int code_table[]) {
-//     while ((c = fgetc(filein)) != EOF) {
-//         write_char_bit(c);
-//     }
-// }
-
 
 int encode(const char* infile, const char* outfile) {
     FILE *filein, *fileout;
@@ -145,9 +124,11 @@ int encode(const char* infile, const char* outfile) {
 
     find_frequencies(filein);
     build_tree(&tree);
-    fill_binary_table(code_table, tree, 0);
+    char code[NUM_OF_TREE_BITS] = {'0'};
+    fill_binary_table(code_table, tree, code);
 
-    print_code_table();
+
+
 
     fileout = fopen(outfile, "wb");
     if (fileout == NULL) {
