@@ -21,6 +21,7 @@ typedef struct node Node;
 Node *tree;
 int *frequency;
 int code_table[NUM_OF_MAX_CHARACTERS];
+int debug = 0;
 
 Node *tree_pointer;
 
@@ -96,10 +97,13 @@ int find_smaller(Node *node_array[], int from) {
 }
 
 void build_tree(Node **tree) {
+    printf("Creating tree\n");
     Node *node_array[NUM_OF_MAX_CHARACTERS];
     for (int i = 0; i < NUM_OF_MAX_CHARACTERS; i++) {
-        if (frequency[i] > 0) {
-            printf("Frequency: %i, char: %c\n", frequency[i], i);
+        if (debug) {
+            if (frequency[i] > 0) {
+                printf("Frequency: %i, char: %c\n", frequency[i], i);
+            }
         }
         node_array[i] = malloc(sizeof(Node));
         node_array[i]->freq = frequency[i];
@@ -127,24 +131,19 @@ void build_tree(Node **tree) {
         }
         subtrees--;
     }
-    printf("Tree successfully created...\n");
     *tree = node_array[small_one];
 }
 
 int find_letter(Node *local_tree, const int bit) {
     if (bit) {
-        //printf("Going right...\n");
         if (local_tree->right->letter >= 0) {
-            //printf("Found letter: %i\n", local_tree->right->letter);
             return local_tree->right->letter;
         } else {
             tree_pointer = local_tree->right;
             return LETTER_NOT_FOUND;
         }
     } else {
-        //printf("Going left...\n");
         if (local_tree->left->letter >= 0) {
-            //printf("Found letter: %i\n", local_tree->left->letter);
             return local_tree->left->letter;
         } else {
             tree_pointer = local_tree->left;
@@ -153,37 +152,9 @@ int find_letter(Node *local_tree, const int bit) {
     }
 }
 
-//void fill_binary_table(Node *tree, const char code[]) {
-//    char new_code_left[NUM_OF_TREE_BITS];
-//    char new_code_right[NUM_OF_TREE_BITS];
-//    if (tree->letter >= 0) {
-//        printf("\nChar: %c\n", tree->letter);
-//        for (int y = NUM_OF_TREE_BITS - 1; y >= 0; y--) {
-//            code_table[tree->letter][y] = code[y];
-//            printf("%c", code_table[tree->letter][y]);
-//        }
-//    } else {
-//        for (int k = NUM_OF_TREE_BITS - 1; k >= 0; k--) {
-//            if (k == NUM_OF_TREE_BITS - 1) {
-//                new_code_left[k] = '1';
-//                new_code_right[k] = '2';
-//            } else {
-//                new_code_left[k] = code[k + 1];
-//                new_code_right[k] = code[k + 1];
-//            }
-//        }
-//        fill_binary_table(tree->left, new_code_left);
-//        fill_binary_table(tree->right, new_code_right);
-//    }
-//}
-
 void fill_binary_table(Node *tree, int code) {
     if (tree->letter >= 0) {
         code_table[tree->letter] = code;
-        //printf("\nChar: %c %i, code %i\n", tree->letter, tree->letter, code);
-        char buffer[65];
-        itoa(code, buffer, 2);
-        //printf("Binary value = %s\n", buffer);
     } else {
         fill_binary_table(tree->left, code * 2);
         fill_binary_table(tree->right, code * 2 + 1);
@@ -194,11 +165,49 @@ int flush_buffer(FILE *f) {
     if (bits_in_buffer) {
         size_t bytes_written = fwrite(buffer, 1, (size_t) ((bits_in_buffer + 7) >> 3), f);
         if (bytes_written < MAX_BUFFER_SIZE && ferror(f)) {
+            fprintf(stderr, "Flushing a buffer failed\n");
             return ERROR;
         }
         bits_in_buffer = 0;
     }
     return SUCCESS;
+}
+
+//For linux compilers...
+//https://www.techiedelight.com/implement-itoa-function-in-c/
+void swap(char *x, char *y) {
+    char t = *x;
+    *x = *y;
+    *y = t;
+}
+
+char *reverse(char *buffer, int i, int j) {
+    while (i < j)
+        swap(&buffer[i++], &buffer[j--]);
+
+    return buffer;
+}
+
+char *itoa(int value, char *buffer, int base) {
+    if (base < 2 || base > 32)
+        return buffer;
+    int n = abs(value);
+
+    int i = 0;
+    while (n) {
+        int r = n % base;
+        if (r >= 10)
+            buffer[i++] = 65 + (r - 10);
+        else
+            buffer[i++] = 48 + r;
+        n = n / base;
+    }
+    if (i == 0)
+        buffer[i++] = '0';
+    if (value < 0 && base == 10)
+        buffer[i++] = '-';
+    buffer[i] = '\0';
+    return reverse(buffer, 0, i - 1);
 }
 
 int encode_char(int character, FILE *outfile) {
@@ -207,22 +216,29 @@ int encode_char(int character, FILE *outfile) {
     char c;
     int found_first_bit = 0;
     code = code_table[character];
-    //printf("Char %c; Code %i\n", character, code);
+    if (debug) {
+        printf("Char %c; Code %i\n", character, code);
+    }
     char buffer[65];
-    for (int i = 0; i < 65; i++){
+    for (int i = 0; i < 65; i++) {
         buffer[i] = -1;
     }
     itoa(code, buffer, 2);
-    //printf("Binary value = %s\n", buffer);
+    if (debug) {
+        printf("Binary value = %s\n", buffer);
+    }
     for (int k = 0; k < 65; k++) {
         c = buffer[k];
-        //printf("Read from buffer %c \n", c);
         if (c == '0') {
-            //printf("Writing bit 0\n");
+            if (debug) {
+                printf("Writing bit 0\n");
+            }
             res = write_bit(outfile, 0);
         } else if (c == '1') {
             if (found_first_bit) {
-                //printf("Writing bit 1\n");
+                if (debug) {
+                    printf("Writing bit 1\n");
+                }
                 res = write_bit(outfile, 1);
             } else {
                 found_first_bit = 1;
@@ -236,13 +252,14 @@ int encode_char(int character, FILE *outfile) {
 }
 
 int encode_chars_to_file(FILE *infile, FILE *outfile) {
+    printf("Encoding chars to file\n");
     int c;
     fseek(infile, 0, SEEK_SET);
     int res;
-    printf("Writing encoded chars to file...");
     while ((c = fgetc(infile)) != EOF) {
         res = encode_char(c, outfile);
         if (res < 0) {
+            fprintf(stderr, "Encoding a char failed\n");
             return ERROR;
         }
     }
@@ -253,20 +270,22 @@ int encode(const char *infile, const char *outfile) {
     FILE *filein, *fileout;
     filein = fopen(infile, "rb");
     if (filein == NULL) {
-        printf("Failed to open input file.");
+        fprintf(stderr, "Failed to open input file.\n");
         return ERROR;
     }
 
     find_frequencies(filein);
     build_tree(&tree);
+    printf("Filling binary tree\n");
     int code = 1;
     fill_binary_table(tree, code);
     fileout = fopen(outfile, "wb");
     if (fileout == NULL) {
-        printf("Failed to open output file.");
+        fprintf(stderr, "Failed to open output file.\n");
         return ERROR;
     }
-    if (write_legend(fileout) != 0) {
+    if (write_legend(fileout) != SUCCESS) {
+        fprintf(stderr, "Writing a legend failed\n");
         return ERROR;
     }
     int res = encode_chars_to_file(filein, fileout);
@@ -276,10 +295,12 @@ int encode(const char *infile, const char *outfile) {
 }
 
 int write_legend(FILE *outfile) {
+    printf("Writing legend\n");
     int i, j, byte = 0;
     size_t size = sizeof(unsigned int) + NUM_OF_MAX_CHARACTERS * (1 + sizeof(int));
     char *buffer = (char *) calloc(size, 1);
     if (buffer == NULL) {
+        fprintf(stderr, "Buffer is null\n");
         return ERROR;
     }
     j = sizeof(int);
@@ -294,16 +315,16 @@ int write_legend(FILE *outfile) {
             buffer[byte++] = (freq >> (j << 3)) & 0xff;
         }
     }
-    printf("\nWriting header...\n");
     fwrite(buffer, 1, size, outfile);
     free(buffer);
-    return 0;
+    return SUCCESS;
 }
 
 int write_bit(FILE *f, int bit) {
     if (bits_in_buffer == MAX_BUFFER_SIZE << 3) {
         size_t bytes_written = fwrite(buffer, 1, MAX_BUFFER_SIZE, f);
         if (bytes_written < MAX_BUFFER_SIZE && ferror(f)) {
+            fprintf(stderr, "Writing a bit failed\n");
             return ERROR;
         }
         bits_in_buffer = 0;
@@ -317,31 +338,35 @@ int write_bit(FILE *f, int bit) {
 }
 
 int read_legend(FILE *f) {
+    printf("Reading legend\n");
     size_t bytes_read;
     int byte = 0;
     unsigned char buff[4];
 
     //read original size
     bytes_read = fread(&buff, 1, sizeof(int), f);
-    if (bytes_read < 1)
+    if (bytes_read < 1) {
+        fprintf(stderr, "Reading original size from header failed\n");
         return ERROR;
+    }
     byte = 0;
     original_size = buff[byte];
     while (byte < sizeof(int)) {
         original_size = (original_size << (1 << 3)) | buff[byte++];
     }
-    printf("ORIG_SIZE: %i", original_size);
 
     //read frequencies
     int num = NUM_OF_MAX_CHARACTERS;
     bytes_read = fread(&num, 1, 1, f);
     frequency = (int *) calloc(NUM_OF_MAX_CHARACTERS, sizeof(int));
     if (bytes_read < 1) {
+        fprintf(stderr, "Reading frequencies from header failed\n");
         return ERROR;
     }
     size_t size = NUM_OF_MAX_CHARACTERS * (1 + sizeof(int));
     char *buffer = (char *) calloc(size, 1);
     if (buffer == NULL) {
+        fprintf(stderr, "Buffer is null\n");
         return ERROR;
     }
     fread(buffer, 1, size, f);
@@ -385,6 +410,7 @@ int read_bit(FILE *f) {
 }
 
 void decode_text(FILE *infile, FILE *outfile) {
+    printf("Decoding text\n");
     int bit;
     tree_pointer = tree;
     fseek(infile, -1, SEEK_CUR);
@@ -413,7 +439,7 @@ int decode(const char *infile, const char *outfile) {
     FILE *filein, *fileout;
     filein = fopen(infile, "rb");
     if (filein == NULL) {
-        printf("Failed to open input file.");
+        fprintf(stderr, "Failed to open input file\n");
         return ERROR;
     }
     if (read_legend(filein) > 0) {
@@ -423,7 +449,7 @@ int decode(const char *infile, const char *outfile) {
     fill_binary_table(tree, code);
     fileout = fopen(outfile, "wb");
     if (fileout == NULL) {
-        printf("Failed to open output file.");
+        fprintf(stderr, "Failed to open output file\n");
         return ERROR;
     }
     decode_text(filein, fileout);
@@ -432,11 +458,14 @@ int decode(const char *infile, const char *outfile) {
 
 int main(int argc, char const *argv[]) {
     if (argc != 4) {
+        fprintf(stderr, "Wrong arguments. -e file1 file2 for encode, -d file1 file2 for decode\n");
         return ERROR;
     }
     if (argv[1][0] == '-' && argv[1][1] == 'e') {
         return encode(argv[2], argv[3]);
     } else if (argv[1][0] == '-' && argv[1][1] == 'd') {
         return decode(argv[2], argv[3]);
+    } else {
+        fprintf(stderr, "Wrong arguments. -e file1 file2 for encode, -d file1 file2 for decode\n");
     }
 }
